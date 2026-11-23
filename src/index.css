@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+@theme {
+  --font-condensed: "Barlow Condensed", sans-serif;
+  --font-mono: "Space Mono", monospace;
+  --color-cream: #F4F3EE;
+  --color-safety-orange: #FF5500;
+  --color-electric-purple: #5E5CE6;
+  --color-acid-lime: #CCFF00;
+}
+
+@utility shadow-brutal {
+  box-shadow: 3px 3px 0px #000000;
+}
+
+@utility shadow-brutal-sm {
+  box-shadow: 2px 2px 0px #000000;
+}
+
+@utility shadow-brutal-lg {
+  box-shadow: 5px 5px 0px #000000;
+}
+
+@layer base {
+  body {
+    background-color: #F4F3EE;
+    color: #111111;
+    font-family: "Space Mono", monospace;
+  }
+  h1, h2, h3, h4, .font-condensed {
+    font-family: "Barlow Condensed", sans-serif;
+  }
+}

@@ -4,7 +4,6 @@ import {
   RefreshCw, 
   Shuffle, 
   Users, 
-  Globe, 
   Sparkles, 
   Volume2, 
   VolumeX, 
@@ -12,11 +11,9 @@ import {
   Check, 
   History, 
   Play, 
-  CheckCircle2, 
   Crown,
   Info,
   Bot,
-  Palette,
   Eye,
   X,
   Grid,
@@ -24,7 +21,8 @@ import {
   Link,
   LogOut,
   RotateCcw,
-  Loader2
+  Loader2,
+  ArrowUpRight
 } from 'lucide-react';
 import { 
   onlineManager, 
@@ -79,81 +77,11 @@ const playSound = (type) => {
   }
 };
 
-// Color Theme Definitions
-const THEMES = {
-  notebook: {
-    id: 'notebook',
-    name: 'Math Notebook',
-    bg: 'bg-slate-900',
-    cardBg: 'bg-slate-800/90 text-slate-100',
-    gridBg: 'bg-slate-950',
-    cellBg: 'bg-slate-800 border-amber-500/30 text-amber-300 hover:border-amber-400',
-    cellMarked: 'bg-slate-950 text-slate-600 border-slate-800',
-    accent: 'amber',
-    accentGrad: 'from-amber-500 to-yellow-400',
-    textAccent: 'text-amber-400',
-    borderAccent: 'border-amber-500/40',
-    strokeColor: '#f59e0b'
-  },
-  neon: {
-    id: 'neon',
-    name: 'Dark Neon Arcade',
-    bg: 'bg-zinc-950',
-    cardBg: 'bg-zinc-900/90 text-cyan-100',
-    gridBg: 'bg-black',
-    cellBg: 'bg-zinc-900 border-cyan-500/40 text-cyan-300 hover:border-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.15)]',
-    cellMarked: 'bg-zinc-950 text-zinc-700 border-zinc-800',
-    accent: 'cyan',
-    accentGrad: 'from-cyan-500 to-emerald-400',
-    textAccent: 'text-cyan-400',
-    borderAccent: 'border-cyan-500/40',
-    strokeColor: '#06b6d4'
-  },
-  pastel: {
-    id: 'pastel',
-    name: 'Minimal Light',
-    bg: 'bg-slate-200',
-    cardBg: 'bg-white/95 text-slate-900 shadow-xl',
-    gridBg: 'bg-slate-100',
-    cellBg: 'bg-slate-50 border-indigo-200 text-indigo-700 hover:border-indigo-400 font-extrabold',
-    cellMarked: 'bg-slate-200 text-slate-400 border-slate-300',
-    accent: 'indigo',
-    accentGrad: 'from-indigo-600 to-violet-500',
-    textAccent: 'text-indigo-600',
-    borderAccent: 'border-indigo-300',
-    strokeColor: '#6366f1'
-  },
-  gold: {
-    id: 'gold',
-    name: 'Cyber Gold',
-    bg: 'bg-stone-950',
-    cardBg: 'bg-stone-900/90 text-yellow-100',
-    gridBg: 'bg-black',
-    cellBg: 'bg-stone-900 border-yellow-500/40 text-yellow-300 hover:border-yellow-300',
-    cellMarked: 'bg-stone-950 text-stone-700 border-stone-800',
-    accent: 'yellow',
-    accentGrad: 'from-yellow-500 to-amber-600',
-    textAccent: 'text-yellow-400',
-    borderAccent: 'border-yellow-500/40',
-    strokeColor: '#eab308'
-  }
-};
-
 export default function App() {
   const [mode, setMode] = useState('menu'); // menu, pass-and-play, vs-computer, online-game
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem('bingo_theme') || 'notebook';
-    } catch {
-      return 'notebook';
-    }
-  });
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [gridSize, setGridSize] = useState(5); // 5x5, 6x6, 7x7
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // General state
-  const currentTheme = THEMES[theme] || THEMES.notebook;
   const targetLines = gridSize;
 
   // Pass and Play / Vs Computer local state
@@ -169,16 +97,17 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const [localState, setLocalState] = useState({
-    phase: 'setup',
+  // Local game state initialized with Player 0's board ready immediately
+  const [localState, setLocalState] = useState(() => ({
+    phase: 'ready', // 'ready', 'playing', 'finished'
     setupPlayerIdx: 0,
-    boards: {},
+    boards: { 0: generateRandomGrid(5) },
     calledNumbers: [],
     currentTurnIdx: 0,
     winners: [],
     completedLines: {},
     isAi: {}
-  });
+  }));
 
   // Modal for Viewing Revealed Cards
   const [viewCardsModal, setViewCardsModal] = useState({
@@ -213,32 +142,39 @@ export default function App() {
     };
   }, []);
 
-  // Safe manual board update with real-time duplicate check (for local setup)
-  const setCellLocalBoard = (playerIdx, cellIndex, val) => {
-    setLocalState(prev => {
-      const currentBoard = [...prev.boards[playerIdx]];
-      const maxVal = gridSize * gridSize;
+  // Handle Grid Size Change with immediate board synchronization
+  const handleGridSizeChange = (newSize) => {
+    setGridSize(newSize);
+    setLocalState(prev => ({
+      ...prev,
+      boards: {
+        ...prev.boards,
+        0: generateRandomGrid(newSize)
+      },
+      calledNumbers: [],
+      winners: [],
+      completedLines: {},
+      phase: 'ready',
+      currentTurnIdx: 0
+    }));
+    setMode('menu');
+  };
 
-      if (val !== null && (val < 1 || val > maxVal)) {
-        showToast(`Number must be between 1 and ${maxVal}!`);
-        return prev;
-      }
-
-      // Check duplicate
-      if (val !== null) {
-        const existingIdx = currentBoard.indexOf(val);
-        if (existingIdx !== -1 && existingIdx !== cellIndex) {
-          showToast(`Number ${val} is already placed on box #${existingIdx + 1}!`);
-          return prev;
-        }
-      }
-
-      currentBoard[cellIndex] = val;
-      return {
+  // Auto-Shuffle on Right Panel
+  const handleAutoShuffle = () => {
+    if (mode === 'online-game' && onlineRoomData) {
+      shuffleOnlineBoard();
+    } else {
+      const newBoard = generateRandomGrid(gridSize);
+      setLocalState(prev => ({
         ...prev,
-        boards: { ...prev.boards, [playerIdx]: currentBoard }
-      };
-    });
+        boards: {
+          ...prev.boards,
+          0: newBoard
+        }
+      }));
+      showToast('Card re-shuffled!');
+    }
   };
 
   // Announce Number for Local Game (declared before AI effect)
@@ -254,6 +190,7 @@ export default function App() {
 
       for (let i = 0; i < playerCount; i++) {
         const pBoard = prev.boards[i];
+        if (!pBoard) continue;
         const lines = calculateLines(pBoard, nextCalled, gridSize);
         newCompleted[i] = lines;
 
@@ -296,7 +233,7 @@ export default function App() {
     });
   }, [soundEnabled, playerCount, gridSize, targetLines, playerNames]);
 
-  // --- LOCAL GAME SETUP (PASS & PLAY or VS AI) ---
+  // AI bot turn trigger
   useEffect(() => {
     if (
       (mode === 'vs-computer' || mode === 'pass-and-play') &&
@@ -307,6 +244,7 @@ export default function App() {
       const aiTimer = setTimeout(() => {
         const aiIdx = localState.currentTurnIdx;
         const board = localState.boards[aiIdx];
+        if (!board) return;
         const uncalled = board.filter(n => !localState.calledNumbers.includes(n));
 
         if (uncalled.length === 0) return;
@@ -375,13 +313,17 @@ export default function App() {
     }
   }, [localState, mode, aiDifficulty, gridSize, announceNumberLocal]);
 
-  // Local Game Controls
+  // Start local game in-place
   const startLocalGame = (isVsAi = false) => {
     const initialBoards = {};
     const isAiMap = {};
 
     for (let i = 0; i < playerCount; i++) {
-      initialBoards[i] = generateRandomGrid(gridSize);
+      if (i === 0 && localState.boards[0] && localState.boards[0].length === gridSize * gridSize) {
+        initialBoards[0] = localState.boards[0];
+      } else {
+        initialBoards[i] = generateRandomGrid(gridSize);
+      }
       isAiMap[i] = isVsAi && i > 0;
     }
 
@@ -397,46 +339,19 @@ export default function App() {
     });
     setMode(isVsAi ? 'vs-computer' : 'pass-and-play');
     if (soundEnabled) playSound('line');
+    showToast(`Match started! ${isVsAi ? 'Playing vs AI' : 'Pass & Play mode'}`);
   };
 
-  const autoFillLocalBoard = (playerIdx) => {
-    const newBoard = generateRandomGrid(gridSize);
+  const resetToSetup = () => {
     setLocalState(prev => ({
       ...prev,
-      boards: { ...prev.boards, [playerIdx]: newBoard }
+      phase: 'ready',
+      calledNumbers: [],
+      winners: [],
+      completedLines: {},
+      currentTurnIdx: 0
     }));
-  };
-
-  const finishLocalPlayerSetup = () => {
-    const currentBoard = localState.boards[localState.setupPlayerIdx] || [];
-    const requiredTotal = gridSize * gridSize;
-    const isComplete = currentBoard.length === requiredTotal && currentBoard.every(n => n !== null && n !== undefined);
-
-    if (!isComplete) {
-      showToast(`Please fill all ${requiredTotal} boxes completely before proceeding!`);
-      return;
-    }
-
-    if (localState.setupPlayerIdx < playerCount - 1) {
-      setLocalState(prev => ({
-        ...prev,
-        setupPlayerIdx: prev.setupPlayerIdx + 1
-      }));
-    } else {
-      setLocalState(prev => {
-        const swapped = {};
-        for (let i = 0; i < playerCount; i++) {
-          const nextIdx = (i + 1) % playerCount;
-          swapped[i] = prev.boards[nextIdx];
-        }
-        return {
-          ...prev,
-          boards: swapped,
-          phase: 'playing'
-        };
-      });
-      if (soundEnabled) playSound('line');
-    }
+    setMode('menu');
   };
 
   // --- ONLINE MULTIPLAYER LOGIC ---
@@ -474,7 +389,9 @@ export default function App() {
     setOnlineIsLoading(true);
 
     const code = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const board = generateRandomGrid(gridSize);
+    const board = (localState.boards[0] && localState.boards[0].length === gridSize * gridSize)
+      ? localState.boards[0]
+      : generateRandomGrid(gridSize);
 
     try {
       const room = await onlineManager.createRoom({
@@ -586,8 +503,8 @@ export default function App() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Helper: SVG Line Strike-through overlay across completed lines
-  const renderLineStrikeThroughs = (completedLines, size, strokeColor) => {
+  // Helper: SVG Line Strike-through overlay
+  const renderLineStrikeThroughs = (completedLines, size, strokeColor = '#000000') => {
     if (!completedLines || completedLines.length === 0) return null;
 
     return (
@@ -599,20 +516,20 @@ export default function App() {
 
           if (line.type === 'row') {
             y1 = y2 = line.index * cellSize + halfCell;
-            x1 = 4;
-            x2 = 96;
+            x1 = 3;
+            x2 = 97;
           } else if (line.type === 'col') {
             x1 = x2 = line.index * cellSize + halfCell;
-            y1 = 4;
-            y2 = 96;
+            y1 = 3;
+            y2 = 97;
           } else if (line.type === 'diag1') {
-            x1 = y1 = 4;
-            x2 = y2 = 96;
+            x1 = y1 = 3;
+            x2 = 97;
           } else if (line.type === 'diag2') {
-            x1 = 96;
-            y1 = 4;
-            x2 = 4;
-            y2 = 96;
+            x1 = 97;
+            y1 = 3;
+            x2 = 3;
+            y2 = 97;
           }
 
           return (
@@ -622,10 +539,10 @@ export default function App() {
               y1={`${y1}%`}
               x2={`${x2}%`}
               y2={`${y2}%`}
-              stroke={strokeColor || '#f59e0b'}
+              stroke={strokeColor}
               strokeWidth="6"
-              strokeLinecap="round"
-              className="drop-shadow-lg opacity-90 animate-pulse"
+              strokeLinecap="square"
+              className="drop-shadow-sm opacity-95"
             />
           );
         })}
@@ -633,25 +550,49 @@ export default function App() {
     );
   };
 
-  // Helper: Letter header (e.g. B - I - N - G - O) based on grid size
+  // Helper: Letter header (e.g. B - I - N - G - O)
   const renderBingoLetterHeader = (completedCount, size) => {
     const defaultLetters = ['B', 'I', 'N', 'G', 'O', 'S', '!'];
+    const symbols = ['■', '●', '▶', '//', '★', '▲', '◆'];
     const letters = defaultLetters.slice(0, size);
 
     return (
-      <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+      <div 
+        className="grid gap-1.5 sm:gap-2 w-full max-w-md"
+        style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+      >
         {letters.map((letter, idx) => {
           const unlocked = completedCount > idx;
+          const colors = [
+            'bg-[#FF5500] text-white',
+            'bg-[#5E5CE6] text-white',
+            'bg-[#CCFF00] text-black',
+            'bg-black text-white',
+            'bg-[#FF5500] text-white',
+            'bg-[#5E5CE6] text-white',
+            'bg-[#CCFF00] text-black'
+          ];
+          const activeColor = colors[idx % colors.length];
+
           return (
             <div
               key={idx}
-              className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black text-sm sm:text-lg transition-all duration-300 ${
+              className={`border-2 border-black flex flex-col justify-between p-1.5 sm:p-2 transition-all duration-200 select-none ${
                 unlocked
-                  ? 'bg-gradient-to-tr from-amber-500 to-yellow-300 text-slate-950 shadow-lg scale-105 ring-2 ring-yellow-400/50'
-                  : 'bg-slate-800/80 text-slate-500 border border-slate-700/60'
+                  ? `${activeColor} shadow-brutal-sm scale-[1.03]`
+                  : 'bg-white text-black/30'
               }`}
             >
-              {letter}
+              <div className="flex items-center justify-between text-[8px] sm:text-[9px] font-mono font-bold leading-none">
+                <span>0{idx + 1}</span>
+                <span>{symbols[idx % symbols.length]}</span>
+              </div>
+              <div className="font-condensed font-black text-2xl sm:text-3xl text-center leading-none mt-1 sm:mt-1.5">
+                {letter}
+              </div>
+              <div className="text-[7px] sm:text-[8px] font-mono uppercase text-center mt-0.5 tracking-tight font-bold opacity-80">
+                {unlocked ? 'ACTIVE' : 'LOCK'}
+              </div>
             </div>
           );
         })}
@@ -667,938 +608,873 @@ export default function App() {
     onlineRoomData?.gridSize || 5
   );
 
+  // Local game display: in vs-computer mode, permanently pin display to Player 0 (human user)
+  const localDisplayPlayerIdx = mode === 'vs-computer' ? 0 : localState.currentTurnIdx;
+  const isLocalUserTurn = localState.currentTurnIdx === localDisplayPlayerIdx;
+
+  // Unified Board State Variables (Right Section)
+  const isOnline = mode === 'online-game';
+  const activeGridSize = isOnline ? (onlineRoomData?.gridSize || gridSize) : gridSize;
+  const activeBoard = isOnline 
+    ? myOnlineBoard 
+    : (localState.boards[localDisplayPlayerIdx] || localState.boards[0] || []);
+  const activeCompletedLines = isOnline 
+    ? myOnlineCompletedLines 
+    : (localState.completedLines[localDisplayPlayerIdx] || []);
+  const isGameActive = isOnline 
+    ? onlineRoomData?.status === 'playing' 
+    : localState.phase === 'playing';
+  const isUserTurnToCall = isOnline 
+    ? (onlineRoomData?.turnUserId === myPlayerId) 
+    : (isGameActive && isLocalUserTurn);
+  const activeCalledNumbers = isOnline 
+    ? (onlineRoomData?.calledNumbers || []) 
+    : localState.calledNumbers;
+
   return (
-    <div className={`min-h-screen ${currentTheme.bg} text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 flex flex-col items-center justify-between p-3 sm:p-6 relative overflow-x-hidden transition-colors duration-300`}>
+    <div className="min-h-screen bg-[#F4F3EE] text-[#111111] font-mono selection:bg-[#FF5500] selection:text-white flex flex-col items-center justify-between p-3 sm:p-6 relative overflow-x-hidden">
       
       {/* Toast Alert Banner */}
       {toastMessage && (
-        <div className="fixed top-5 z-[120] bg-slate-900/95 text-amber-300 font-extrabold text-xs sm:text-sm px-5 py-3 rounded-2xl shadow-2xl border border-amber-500/50 flex items-center gap-2.5 backdrop-blur-md animate-bounce">
-          <AlertTriangle size={18} className="text-amber-400 shrink-0" />
-          <span>{toastMessage}</span>
+        <div className="fixed top-4 z-[120] bg-black text-[#CCFF00] font-mono text-xs sm:text-sm px-4 py-2.5 border-2 border-black shadow-brutal flex items-center gap-2">
+          <AlertTriangle size={16} className="text-[#CCFF00] shrink-0" />
+          <span className="font-bold">{toastMessage}</span>
         </div>
       )}
 
-      {/* HEADER */}
-      <header className="w-full max-w-4xl flex items-center justify-between border-b border-slate-800/80 pb-4 relative z-50">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${currentTheme.accentGrad} text-slate-950 font-black flex items-center justify-center text-xl shadow-lg`}>
-            {gridSize}
-          </div>
-          <div>
-            <h1 className="font-extrabold text-xl sm:text-2xl tracking-tight text-white">
-              Paper Bingo <span className={currentTheme.textAccent}>[{gridSize}x{gridSize}]</span>
-            </h1>
-            <p className="text-xs text-slate-400">Multiplayer & vs AI Notebook Game</p>
-          </div>
+      {/* TOP HEADER */}
+      <header className="w-full max-w-6xl flex items-center justify-between border-b-2 border-black pb-3 relative z-50">
+        <div>
+          <h1 className="font-condensed font-black text-4xl sm:text-5xl tracking-tighter uppercase leading-none">
+            BINGO
+          </h1>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Clickable Theme Switcher with high z-index */}
-          <div className="relative">
-            <button
-              onClick={() => setShowThemeMenu(!showThemeMenu)}
-              className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition flex items-center gap-1.5 shadow-lg relative z-50"
-            >
-              <Palette size={18} />
-              <span className="hidden sm:inline text-xs font-semibold">Theme</span>
-            </button>
-
-            {showThemeMenu && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40 bg-black/20" 
-                  onClick={() => setShowThemeMenu(false)} 
-                />
-                <div className="absolute right-0 mt-2 w-52 bg-slate-900/98 backdrop-blur-md border border-slate-700 rounded-2xl p-2.5 shadow-2xl z-50 flex flex-col gap-1 ring-1 ring-white/10">
-                  <span className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">Select Theme</span>
-                  {Object.values(THEMES).map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => {
-                        setTheme(t.id);
-                        try {
-                          localStorage.setItem('bingo_theme', t.id);
-                        } catch (e) {
-                          console.debug(e);
-                        }
-                        setShowThemeMenu(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition ${
-                        theme === t.id ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <span>{t.name}</span>
-                      {theme === t.id && <Check size={14} className="text-amber-400" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition"
+            className="p-2 border-2 border-black bg-white hover:bg-black hover:text-white text-black transition-all shadow-brutal-sm cursor-pointer"
             title={soundEnabled ? 'Mute Sounds' : 'Unmute Sounds'}
           >
-            {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} className="text-slate-500" />}
+            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} className="text-black/40" />}
           </button>
 
-          {mode !== 'menu' && (
+          {(mode !== 'menu' || localState.phase !== 'ready') && (
             <button
               onClick={() => {
                 if (mode === 'online-game') {
                   leaveOnlineRoom();
                 } else {
-                  setMode('menu');
+                  resetToSetup();
                 }
               }}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-1.5"
+              className="px-2.5 py-1.5 border-2 border-black bg-white hover:bg-black hover:text-white font-condensed font-black text-xs uppercase transition-all shadow-brutal-sm flex items-center gap-1 cursor-pointer"
             >
-              <RefreshCw size={14} /> Main Menu
+              <RefreshCw size={12} /> NEW MATCH
             </button>
           )}
         </div>
       </header>
 
-      {/* MAIN CONTAINER */}
-      <main className="w-full max-w-4xl my-auto py-6 flex flex-col items-center relative z-10">
+      {/* MAIN CONTAINER: 2-SECTION DASHBOARD */}
+      <main className="w-full max-w-6xl my-auto py-4 flex flex-col gap-5 relative z-10">
 
-        {/* MAIN MENU */}
-        {mode === 'menu' && (
-          <div className="w-full max-w-md flex flex-col items-center gap-6">
-
-            {/* Grid Size Selection */}
-            <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-3`}>
-              <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Grid size={15} className={currentTheme.textAccent} /> Select Grid Size
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {[5, 6, 7].map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => setGridSize(size)}
-                    className={`py-3 rounded-2xl font-black text-sm transition flex flex-col items-center gap-0.5 border ${
-                      gridSize === size
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg scale-[1.02]'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <span>{size}x{size}</span>
-                    <span className="text-[10px] font-semibold opacity-80">{size} Lines</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Player Count Selection (Local) */}
-            <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-3`}>
-              <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Users size={15} className={currentTheme.textAccent} /> Local Player Count
-              </span>
-              <div className="grid grid-cols-4 gap-2">
-                {[2, 3, 4, 5].map((cnt) => (
-                  <button
-                    key={cnt}
-                    onClick={() => setPlayerCount(cnt)}
-                    className={`py-2.5 rounded-xl font-black text-xs transition border ${
-                      playerCount === cnt
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    {cnt} Players
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Offline Game Modes */}
-            <div className="w-full space-y-3">
-              {/* Pass & Play */}
-              <button
-                onClick={() => startLocalGame(false)}
-                className="w-full p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-sm shadow-xl hover:scale-[1.01] active:scale-[0.99] transition flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-slate-950/10">
-                    <Users size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-extrabold text-base">Pass & Play ({playerCount} Players)</p>
-                    <p className="text-xs text-slate-900/80 font-medium">Single device offline multiplayer</p>
-                  </div>
-                </div>
-                <Play size={18} fill="currentColor" />
-              </button>
-
-              {/* vs Computer */}
-              <button
-                onClick={() => startLocalGame(true)}
-                className="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 text-white font-extrabold text-sm hover:border-slate-700 transition flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
-                    <Bot size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-extrabold text-base">vs Computer AI ({playerCount - 1} Bots)</p>
-                    <p className="text-xs text-slate-400 font-medium">Play solo against smart bots</p>
-                  </div>
-                </div>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-amber-300 border border-slate-700">
-                  {aiDifficulty.toUpperCase()}
-                </span>
-              </button>
-
-              {/* AI Difficulty Selector */}
-              <div className="flex gap-2 w-full pt-1">
-                {['easy', 'medium', 'hard'].map((diff) => (
-                  <button
-                    key={diff}
-                    onClick={() => setAiDifficulty(diff)}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold capitalize transition border ${
-                      aiDifficulty === diff
-                        ? 'bg-slate-800 text-amber-300 border-amber-500/50'
-                        : 'bg-slate-950 text-slate-500 border-slate-900 hover:text-slate-300'
-                    }`}
-                  >
-                    AI: {diff}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Online Room Section */}
-            <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-4`}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Globe size={15} className="text-indigo-400" /> Online Real-Time Rooms
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Live P2P
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Your Nickname:</label>
-                <input
-                  type="text"
-                  placeholder="Your Nickname"
-                  value={onlineMyName}
-                  onChange={(e) => {
-                    setOnlineMyName(e.target.value);
-                    localStorage.setItem('bingo_username', e.target.value);
-                  }}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 focus:outline-none focus:border-indigo-500 transition"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <button
-                  disabled={onlineIsLoading}
-                  onClick={createOnlineRoom}
-                  className="py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  {onlineIsLoading ? (
-                    <Loader2 size={15} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={15} />
-                  )}
-                  <span>Create Room</span>
-                </button>
-
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="ROOM CODE"
-                    value={joinRoomInput}
-                    onChange={(e) => setJoinRoomInput(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === 'Enter' && joinOnlineRoom()}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-indigo-500 uppercase tracking-wider"
-                  />
-                  <button
-                    disabled={onlineIsLoading || !joinRoomInput.trim()}
-                    onClick={joinOnlineRoom}
-                    className="px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 font-bold text-xs border border-slate-700 transition disabled:opacity-50 flex items-center gap-1"
-                  >
-                    {onlineIsLoading ? <Loader2 size={13} className="animate-spin" /> : null}
-                    Join
-                  </button>
-                </div>
-              </div>
-            </div>
-
+        {/* ======================================================== */}
+        {/* TOP SPECIFICATION RIBBON (Replaces bulky Match card)     */}
+        {/* ======================================================== */}
+        <div className="w-full bg-[#FF5500] text-white border-2 border-black shadow-brutal px-3 sm:px-4 py-2 sm:py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="font-condensed font-black text-base sm:text-lg uppercase tracking-wider bg-black text-[#CCFF00] px-2 py-0.5 border border-black leading-none">
+              MATCH // 01
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-bold uppercase tracking-tight text-white flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${isGameActive ? 'bg-[#CCFF00] animate-ping' : 'bg-white'}`}></span>
+              {mode === 'online-game' ? 'ONLINE MULTIPLAYER' : mode === 'vs-computer' ? 'VS COMPUTER AI' : mode === 'pass-and-play' ? 'PASS & PLAY' : 'GAME SETUP'}
+            </span>
           </div>
-        )}
 
-        {/* --- LOCAL GAME: BOARD SETUP PHASE --- */}
-        {(mode === 'pass-and-play' || mode === 'vs-computer') && localState.phase === 'setup' && (
-          <div className={`w-full max-w-2xl ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-6 text-center shadow-2xl flex flex-col items-center gap-5`}>
-            <div>
-              <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest">
-                Setup Phase ({localState.setupPlayerIdx + 1}/{playerCount})
-              </span>
-              <h2 className="text-2xl font-black text-white mt-0.5">
-                {playerNames[localState.setupPlayerIdx]}'s Card Setup
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Fill numbers 1 to {gridSize * gridSize} or click Auto-Shuffle
-              </p>
-            </div>
-
-            <div 
-              className="grid gap-2 w-full max-w-md aspect-square bg-slate-950 p-3 rounded-2xl border border-slate-800 shadow-inner"
-              style={{ 
-                display: 'grid',
-                gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` 
-              }}
-            >
-              {(localState.boards[localState.setupPlayerIdx] || Array(gridSize * gridSize).fill(null)).map((num, i) => (
-                <div key={i} className="w-full h-full flex items-center justify-center">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={num || ''}
-                    onChange={(e) => {
-                      const valStr = e.target.value.replace(/[^0-9]/g, '');
-                      const val = parseInt(valStr, 10);
-                      const maxVal = gridSize * gridSize;
-                      if (!valStr) {
-                        setCellLocalBoard(localState.setupPlayerIdx, i, null);
-                      } else if (val >= 1 && val <= maxVal) {
-                        setCellLocalBoard(localState.setupPlayerIdx, i, val);
-                      }
-                    }}
-                    className="w-full h-full text-center font-black text-amber-300 bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-amber-500 focus:bg-slate-800 transition text-base sm:text-2xl [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-3 w-full max-w-md">
-              <button
-                onClick={() => autoFillLocalBoard(localState.setupPlayerIdx)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition flex items-center justify-center gap-1.5"
-              >
-                <Shuffle size={14} /> Auto-Shuffle
-              </button>
-              <button
-                onClick={finishLocalPlayerSetup}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5"
-              >
-                <CheckCircle2 size={15} /> Confirm Layout
-              </button>
-            </div>
+          <div className="flex items-center gap-2 sm:gap-3 font-mono text-[10px] sm:text-xs font-bold uppercase text-white/95">
+            <span className="bg-black/20 px-2 py-0.5 border border-black/40">
+              GRID: {activeGridSize}×{activeGridSize}
+            </span>
+            <span className="bg-black/20 px-2 py-0.5 border border-black/40">
+              {mode === 'online-game' ? `${Object.keys(onlineRoomData?.players || {}).length || 1} PLAYERS` : `${playerCount} PLAYERS`}
+            </span>
+            <span className="bg-black/20 px-2 py-0.5 border border-black/40">
+              TARGET: {isOnline ? (onlineRoomData?.targetLines || targetLines) : targetLines} LINES
+            </span>
           </div>
-        )}
+        </div>
 
-        {/* --- LOCAL GAME: ACTIVE PLAYING PHASE --- */}
-        {(mode === 'pass-and-play' || mode === 'vs-computer') && (localState.phase === 'playing' || localState.phase === 'finished') && (
-          <div className="w-full max-w-2xl flex flex-col items-center gap-6">
+        {/* ======================================================== */}
+        {/* 2-SECTION GRID (LEFT PANE & RIGHT PANE CONTAINERS)       */}
+        {/* ======================================================== */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 w-full items-start">
 
-            {localState.phase === 'playing' && (
-              <div className="w-full flex flex-col items-center gap-4">
-                {/* Turn Header */}
-                <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center justify-between`}>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Turn</span>
-                    <h3 className="text-xl font-extrabold text-amber-400">
-                      {playerNames[localState.currentTurnIdx]}
-                      {localState.isAi[localState.currentTurnIdx] && ' (AI)'}
-                    </h3>
-                  </div>
+          {/* ------------------------------------------------------ */}
+          {/* LEFT PANE CONTAINER: CONTROLS, MODES & TELEMETRY       */}
+          {/* ------------------------------------------------------ */}
+          <div className="lg:col-span-5 bg-white border-2 border-black shadow-brutal p-4 sm:p-5 flex flex-col gap-4 w-full">
 
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Lines ({localState.completedLines[localState.currentTurnIdx]?.length || 0}/{targetLines})
+            {/* Left Pane Header */}
+            <div className="flex items-center justify-between border-b-2 border-black pb-2">
+              <span className="font-condensed font-black text-xl uppercase tracking-wider text-black">
+                {isGameActive ? 'MATCH CONSOLE' : 'MATCH SETUP'}
+              </span>
+              <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 bg-black text-[#CCFF00]">
+                PANE // 01
+              </span>
+            </div>
+
+            {/* A. SETUP VIEW (Before Match is active) */}
+            {!isGameActive && mode !== 'online-game' && (
+              <>
+                {/* Grid Size Selection */}
+                <div className="w-full bg-white border-2 border-black shadow-brutal p-3 sm:p-4 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Grid size={13} /> SELECT GRID MATRIX
                     </span>
-                    {renderBingoLetterHeader(localState.completedLines[localState.currentTurnIdx]?.length || 0, gridSize)}
+                    <span className="text-[9px] font-mono font-bold text-black/50">LINES = GRID</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[5, 6, 7].map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => handleGridSizeChange(size)}
+                        className={`py-2 px-1 border-2 border-black font-condensed font-black text-base flex flex-col items-center justify-center transition-all cursor-pointer ${
+                          gridSize === size
+                            ? 'bg-black text-[#CCFF00] shadow-brutal-sm -translate-y-0.5'
+                            : 'bg-white text-black hover:bg-black/5'
+                        }`}
+                      >
+                        <span>{size} × {size}</span>
+                        <span className="text-[8px] font-mono uppercase font-bold opacity-80">{size} LINES</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Grid Card */}
-                <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col items-center gap-4 relative`}>
-                  
-                  {/* Privacy overlay during AI turn */}
-                  {localState.isAi[localState.currentTurnIdx] && (
-                    <div className="absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center gap-3 text-amber-400 p-6 text-center">
-                      <Bot size={40} className="animate-bounce" />
-                      <p className="font-extrabold text-lg">AI is thinking...</p>
-                      <p className="text-xs text-slate-400">Card masked during bot's turn for fair play</p>
-                    </div>
-                  )}
+                {/* Local Player Count */}
+                <div className="w-full bg-white border-2 border-black shadow-brutal p-3 sm:p-4 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Users size={13} /> LOCAL PLAYER COUNT
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-black/50">{playerCount} SEATS</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[2, 3, 4, 5].map((cnt) => (
+                      <button
+                        key={cnt}
+                        onClick={() => setPlayerCount(cnt)}
+                        className={`py-2 px-1 border-2 border-black font-condensed font-black text-xs sm:text-sm uppercase transition-all cursor-pointer ${
+                          playerCount === cnt
+                            ? 'bg-[#FF5500] text-white shadow-brutal-sm -translate-y-0.5'
+                            : 'bg-white text-black hover:bg-black/5'
+                        }`}
+                      >
+                        {cnt} Players
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                  <div 
-                    className="grid gap-2 w-full max-w-md aspect-square bg-slate-950 p-3 rounded-2xl border border-slate-800 shadow-inner relative" 
-                    style={{ 
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` 
-                    }}
+                {/* Mode Launcher Cards */}
+                <div className="w-full flex flex-col gap-3">
+                  {/* Card 01: Pass & Play */}
+                  <button
+                    onClick={() => startLocalGame(false)}
+                    className="w-full p-4 bg-[#FF5500] text-white border-2 border-black shadow-brutal hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-brutal-sm transition-all flex items-center justify-between text-left group cursor-pointer"
                   >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold bg-black text-white px-1.5 py-0.5">01</span>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-black">OFFLINE</span>
+                      </div>
+                      <h3 className="font-condensed font-black text-2xl sm:text-3xl uppercase tracking-tight mt-1 leading-none text-white">
+                        PASS & PLAY
+                      </h3>
+                      <p className="text-[10px] font-mono uppercase tracking-wider opacity-90 mt-1">
+                        {playerCount} PLAYERS • SINGLE DEVICE
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 border-2 border-black bg-black text-white flex items-center justify-center shrink-0 group-hover:bg-white group-hover:text-black transition-colors">
+                      <Play size={18} fill="currentColor" />
+                    </div>
+                  </button>
+
+                  {/* Card 02: VS Computer AI */}
+                  <div className="w-full p-4 bg-[#5E5CE6] text-white border-2 border-black shadow-brutal flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold bg-black text-white px-1.5 py-0.5">02</span>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white/80">SOLO</span>
+                      </div>
+                    </div>
                     
-                    {renderLineStrikeThroughs(
-                      localState.completedLines[localState.currentTurnIdx] || [],
-                      gridSize,
-                      currentTheme.strokeColor
-                    )}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-condensed font-black text-2xl sm:text-3xl uppercase tracking-tight leading-none">
+                          VS COMPUTER AI
+                        </h3>
+                        <p className="text-[10px] font-mono uppercase tracking-wider opacity-80 mt-1">
+                          TACTICAL BOT OPPONENT
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => startLocalGame(true)}
+                        className="w-10 h-10 border-2 border-black bg-black text-white hover:bg-white hover:text-black flex items-center justify-center shrink-0 transition-colors shadow-brutal-sm cursor-pointer"
+                        title="Start vs AI Match"
+                      >
+                        <Play size={18} fill="currentColor" />
+                      </button>
+                    </div>
 
-                    {(localState.boards[localState.currentTurnIdx] || []).map((num, cellIdx) => {
-                      const isCalled = localState.calledNumbers.includes(num);
-
-                      return (
+                    <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-white/20">
+                      {['easy', 'medium', 'hard'].map((diff) => (
                         <button
-                          key={cellIdx}
-                          disabled={isCalled || localState.isAi[localState.currentTurnIdx]}
-                          onClick={() => announceNumberLocal(num)}
-                          className={`relative w-full h-full rounded-xl font-black transition-all flex items-center justify-center border text-base sm:text-2xl ${
-                            isCalled
-                              ? currentTheme.cellMarked
-                              : `${currentTheme.cellBg} hover:scale-[1.03]`
+                          key={diff}
+                          onClick={() => setAiDifficulty(diff)}
+                          className={`py-1.5 font-mono text-[10px] font-bold uppercase border-2 border-black transition-all cursor-pointer ${
+                            aiDifficulty === diff
+                              ? 'bg-black text-[#CCFF00] shadow-brutal-sm'
+                              : 'bg-white/10 text-white hover:bg-white/20'
                           }`}
                         >
-                          <span className="flex items-center justify-center text-center w-full h-full leading-none">{num}</span>
-                          {isCalled && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-red-500/80 text-2xl sm:text-4xl font-black">✕</span>
-                            </div>
-                          )}
+                          {diff}
                         </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card 03: Online Real-Time Rooms */}
+                  <div className="w-full p-4 bg-[#CCFF00] text-black border-2 border-black shadow-brutal flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold bg-black text-white px-1.5 py-0.5">03</span>
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-black">ONLINE</span>
+                    </div>
+
+                    <div>
+                      <h3 className="font-condensed font-black text-2xl sm:text-3xl uppercase tracking-tight leading-none text-black">
+                        ONLINE ROOMS
+                      </h3>
+                      <p className="text-[10px] font-mono uppercase tracking-wider text-black/70 mt-1 font-bold">
+                        MULTIPLAYER
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[8px] font-mono font-bold uppercase text-black/70">PLAYER NAME:</label>
+                      <input
+                        type="text"
+                        placeholder="ENTER PLAYER NAME"
+                        value={onlineMyName}
+                        onChange={(e) => {
+                          setOnlineMyName(e.target.value);
+                          localStorage.setItem('bingo_username', e.target.value);
+                        }}
+                        className="w-full px-3 py-1.5 bg-white border-2 border-black font-mono font-bold text-xs text-black focus:outline-none focus:bg-amber-50"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <button
+                        disabled={onlineIsLoading}
+                        onClick={createOnlineRoom}
+                        className="py-2.5 px-3 bg-black text-white hover:bg-white hover:text-black border-2 border-black font-condensed font-black text-base uppercase transition-all shadow-brutal-sm flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        {onlineIsLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                        <span>CREATE ROOM</span>
+                      </button>
+
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          placeholder="ROOM CODE"
+                          value={joinRoomInput}
+                          onChange={(e) => setJoinRoomInput(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => e.key === 'Enter' && joinOnlineRoom()}
+                          className="w-full px-2 py-1 bg-white border-2 border-black font-mono font-bold text-xs text-black focus:outline-none uppercase tracking-wider"
+                        />
+                        <button
+                          disabled={onlineIsLoading || !joinRoomInput.trim()}
+                          onClick={joinOnlineRoom}
+                          className="px-3 bg-black text-[#CCFF00] hover:bg-white hover:text-black border-2 border-black font-condensed font-black text-sm uppercase transition-all shadow-brutal-sm disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          {onlineIsLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+                          JOIN
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* B. ACTIVE LOCAL GAME VIEW (When local match is in progress) */}
+            {isGameActive && !isOnline && (
+              <>
+                {/* Active Player Turn Card */}
+                <div className={`w-full text-white border-2 border-black shadow-brutal p-4 relative flex items-center justify-between transition-colors ${
+                  isLocalUserTurn ? 'bg-[#FF5500]' : 'bg-[#5E5CE6]'
+                }`}>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-1.5 py-0.5 bg-black text-[#CCFF00] font-mono text-[9px] font-bold uppercase tracking-wider">
+                        ACTIVE TURN
+                      </span>
+                      <span className="text-[10px] font-mono uppercase tracking-wider opacity-90 font-bold">
+                        PLAYER // 0{localState.currentTurnIdx + 1}
+                      </span>
+                    </div>
+                    <h3 className="font-condensed font-black text-3xl sm:text-4xl uppercase tracking-tight mt-1 leading-none flex items-center gap-2">
+                      {localState.isAi[localState.currentTurnIdx] && <Bot size={28} className="text-white shrink-0 animate-pulse" />}
+                      <span>{playerNames[localState.currentTurnIdx]}</span>
+                    </h3>
+                    <p className="text-[10px] font-mono uppercase opacity-90 tracking-widest mt-1 font-bold">
+                      {localState.isAi[localState.currentTurnIdx] ? 'AI BOT IS PICKING A NUMBER...' : 'YOUR TURN: CALL A NUMBER FROM YOUR CARD'}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end justify-between self-stretch">
+                    <span className="font-condensed font-black text-xl opacity-90">0{localState.currentTurnIdx + 1}</span>
+                    <ArrowUpRight size={38} strokeWidth={3} className="text-white" />
+                  </div>
+                </div>
+
+                {/* Status Bar */}
+                <div className="w-full bg-black text-white border-2 border-black shadow-brutal p-2.5 text-center">
+                  <span className="block text-[8px] font-mono font-bold uppercase text-white/60 tracking-widest">
+                    SYSTEM STATUS
+                  </span>
+                  <h4 className="font-condensed font-black text-xl sm:text-2xl uppercase tracking-wider text-[#CCFF00]">
+                    {isLocalUserTurn ? 'YOUR MOVE: CALL NUMBER' : 'AI BOT IS CALCULATING MOVE...'}
+                  </h4>
+                </div>
+
+                {/* Call Log */}
+                <div className="w-full bg-white border-2 border-black shadow-brutal p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <History size={13} className="text-[#FF5500]" /> CALL LOG ({localState.calledNumbers.length})
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-black/50">SEQUENCE</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                    {localState.calledNumbers.length === 0 ? (
+                      <span className="text-[10px] font-mono text-black/40">NO NUMBERS CALLED YET</span>
+                    ) : (
+                      localState.calledNumbers.map((n, i) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-black text-[#CCFF00] font-mono font-bold text-[10px] border border-black">
+                          #{i + 1}: {n}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Participants & Standings */}
+                <div className="w-full bg-white border-2 border-black shadow-brutal p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Trophy size={13} className="text-[#FF5500]" /> PARTICIPANTS & STANDINGS
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-black/50">CARDS</span>
+                  </div>
+                  <div className="space-y-1.5 max-h-28 overflow-y-auto pt-1">
+                    {Array.from({ length: playerCount }).map((_, i) => {
+                      const winner = localState.winners.find(w => w.playerIdx === i);
+                      const linesCount = localState.completedLines[i]?.length || 0;
+
+                      return (
+                        <div key={i} className="flex items-center justify-between text-xs font-bold px-2.5 py-1.5 border-2 border-black bg-[#F4F3EE]">
+                          <span className="text-black flex items-center gap-1.5">
+                            {winner && <Crown size={14} className="text-[#FF5500]" />}
+                            {playerNames[i]}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={winner ? 'text-[#FF5500] font-black' : 'text-black/60 font-mono text-[10px]'}>
+                              {winner ? `RANK #${winner.rank} (BINGO)` : `${linesCount}/${targetLines} LINES`}
+                            </span>
+
+                            {winner && (
+                              <button
+                                onClick={() => setViewCardsModal({ open: true, playerIdx: i, onlinePlayerId: null })}
+                                className="p-1 border border-black bg-white hover:bg-black hover:text-white text-black transition cursor-pointer"
+                                title="View Player's Card"
+                              >
+                                <Eye size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Standings & Call Log */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-                  <div className={`p-4 rounded-2xl ${currentTheme.cardBg} border border-slate-800 flex flex-col gap-2`}>
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                      <History size={14} className={currentTheme.textAccent} /> Call Log ({localState.calledNumbers.length})
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
-                      {localState.calledNumbers.map((n, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-bold text-xs">
-                          #{i + 1}: {n}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={`p-4 rounded-2xl ${currentTheme.cardBg} border border-slate-800 flex flex-col gap-2`}>
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                      <Trophy size={14} className="text-yellow-400" /> Players & Card Reveal
-                    </span>
-                    <div className="space-y-1.5 max-h-24 overflow-y-auto pt-1">
-                      {Array.from({ length: playerCount }).map((_, i) => {
-                        const winner = localState.winners.find(w => w.playerIdx === i);
-                        const linesCount = localState.completedLines[i]?.length || 0;
-
-                        return (
-                          <div key={i} className="flex items-center justify-between text-xs font-semibold px-2 py-1 rounded-lg bg-slate-950/60">
-                            <span className="text-slate-300 flex items-center gap-1">
-                              {winner && <Crown size={12} className="text-yellow-400" />}
-                              {playerNames[i]}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className={winner ? 'text-yellow-400 font-extrabold' : 'text-slate-400'}>
-                                {winner ? `Rank #${winner.rank} (BINGO)` : `${linesCount}/${targetLines} Lines`}
-                              </span>
-
-                              {winner && (
-                                <button
-                                  onClick={() => setViewCardsModal({ open: true, playerIdx: i, onlinePlayerId: null })}
-                                  className="p-1 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/40 transition"
-                                  title="View Player's Card"
-                                >
-                                  <Eye size={12} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                {/* Match Action Controls */}
+                <div className="flex gap-2 w-full pt-1">
+                  <button
+                    onClick={() => startLocalGame(mode === 'vs-computer')}
+                    className="flex-1 py-2 bg-white hover:bg-black hover:text-white text-black font-condensed font-black text-sm uppercase border-2 border-black transition shadow-brutal-sm cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw size={14} /> RESTART
+                  </button>
+                  <button
+                    onClick={resetToSetup}
+                    className="flex-1 py-2 bg-black hover:bg-[#FF5500] text-white font-condensed font-black text-sm uppercase border-2 border-black transition shadow-brutal-sm cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw size={14} /> NEW MATCH
+                  </button>
                 </div>
-
-              </div>
+              </>
             )}
 
-            {/* END-GAME RESULT SCREEN */}
-            {localState.phase === 'finished' && (
-              <div className={`w-full max-w-md ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-6 text-center shadow-2xl flex flex-col items-center gap-5`}>
-                <div className="p-4 rounded-full bg-yellow-500/10 text-yellow-400 ring-8 ring-yellow-500/5">
-                  <Trophy size={48} />
+            {/* C. LOCAL GAME CONCLUDED (Victory Screen) */}
+            {localState.phase === 'finished' && !isOnline && (
+              <div className="w-full bg-white border-2 border-black shadow-brutal p-5 text-center flex flex-col items-center gap-4">
+                <div className="w-14 h-14 border-2 border-black bg-[#FF5500] text-white flex items-center justify-center shadow-brutal-sm">
+                  <Trophy size={32} />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-extrabold text-white">Match Concluded!</h2>
-                  <p className="text-xs text-slate-400 mt-1">Final Standings & Winning Rankings</p>
+                  <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-1.5 py-0.5 bg-black text-[#CCFF00]">
+                    MATCH COMPLETE
+                  </span>
+                  <h2 className="font-condensed font-black text-3xl uppercase tracking-tight text-black mt-1">
+                    VICTORY PODIUM
+                  </h2>
                 </div>
 
-                {/* Final Victory Podium List */}
                 <div className="w-full space-y-2">
                   {localState.winners.map((w) => (
-                    <div key={w.playerIdx} className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs font-bold">
-                      <span className="flex items-center gap-2 text-slate-200">
-                        <Crown size={15} className="text-yellow-400" /> #{w.rank} {w.name}
+                    <div key={w.playerIdx} className="p-2.5 bg-[#F4F3EE] border-2 border-black flex items-center justify-between text-xs font-bold">
+                      <span className="flex items-center gap-2 text-black font-condensed font-black text-lg">
+                        <Crown size={18} className="text-[#FF5500]" /> #{w.rank} {w.name}
                       </span>
                       <button
                         onClick={() => setViewCardsModal({ open: true, playerIdx: w.playerIdx, onlinePlayerId: null })}
-                        className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 flex items-center gap-1"
+                        className="px-2 py-0.5 bg-white hover:bg-black hover:text-white text-black border-2 border-black font-mono text-[10px] uppercase shadow-brutal-sm cursor-pointer"
                       >
-                        <Eye size={12} /> View Card
+                        CARD
                       </button>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex gap-2 w-full pt-2">
+                <div className="flex gap-2 w-full pt-1">
                   <button
                     onClick={() => startLocalGame(mode === 'vs-computer')}
-                    className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-lg"
+                    className="flex-1 py-2.5 bg-[#FF5500] hover:bg-black text-white border-2 border-black font-condensed font-black text-base uppercase transition-all shadow-brutal cursor-pointer"
                   >
-                    Play Again
+                    PLAY AGAIN
+                  </button>
+                  <button
+                    onClick={resetToSetup}
+                    className="flex-1 py-2.5 bg-black hover:bg-white hover:text-black text-white border-2 border-black font-condensed font-black text-base uppercase transition-all shadow-brutal cursor-pointer"
+                  >
+                    NEW MATCH
                   </button>
                 </div>
               </div>
             )}
 
-          </div>
-        )}
-
-        {/* --- ONLINE MULTIPLAYER GAMEPLAY --- */}
-        {mode === 'online-game' && onlineRoomData && (
-          <div className="w-full max-w-2xl flex flex-col items-center gap-6">
-
-            {/* Room Header & Share Bar */}
-            <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center justify-between`}>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Code</span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <h3 className="text-xl font-mono font-black text-indigo-400 tracking-widest">{roomId}</h3>
-                  <button 
-                    onClick={copyRoomCode} 
-                    className="p-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-slate-300 transition"
-                    title="Copy Code"
-                  >
-                    {copiedCode ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                  </button>
-                  <button 
-                    onClick={copyRoomLink} 
-                    className="p-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-indigo-300 transition"
-                    title="Copy Invite Link"
-                  >
-                    {copiedLink ? <Check size={14} className="text-green-400" /> : <Link size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 flex items-center gap-1.5">
-                  <Users size={12} />
-                  {Object.keys(onlineRoomData.players || {}).length} Players
-                </span>
-                <button
-                  onClick={leaveOnlineRoom}
-                  className="p-2 rounded-xl bg-slate-900 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-800 transition"
-                  title="Leave Room"
-                >
-                  <LogOut size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* --- ONLINE LOBBY --- */}
-            {onlineRoomData.status === 'lobby' && (
-              <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-6 text-center shadow-2xl flex flex-col items-center gap-6`}>
-                <div>
-                  <div className="flex items-center justify-center gap-1.5 mb-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                    <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest">
-                      Lobby Active • {onlineRoomData.gridSize}x{onlineRoomData.gridSize} Grid
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-black text-white">Online Room Lobby</h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Share room code <strong className="text-indigo-400 font-mono">{roomId}</strong> with friends to join!
-                  </p>
-                </div>
-
-                {/* Joined Players List */}
-                <div className="w-full max-w-sm bg-slate-950/80 rounded-2xl p-3 border border-slate-800 flex flex-col gap-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-400 border-b border-slate-800/80 pb-2 px-1">
-                    <span className="flex items-center gap-1.5">
-                      <Users size={14} className="text-indigo-400" /> Connected Players
-                    </span>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-indigo-300 font-mono font-bold">
-                      {Object.keys(onlineRoomData.players || {}).length} Joined
-                    </span>
+            {/* D. ONLINE MULTIPLAYER CONTROLS */}
+            {isOnline && onlineRoomData && (
+              <div className="w-full flex flex-col gap-4">
+                {/* Room Header & Share Bar */}
+                <div className="w-full bg-white border-2 border-black shadow-brutal p-3 sm:p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono font-bold text-black/60 uppercase tracking-wider">ROOM CODE</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <h3 className="font-mono font-black text-xl text-black tracking-widest">{roomId}</h3>
+                      <button 
+                        onClick={copyRoomCode} 
+                        className="p-1 border border-black bg-[#F4F3EE] hover:bg-black hover:text-white text-black transition cursor-pointer"
+                        title="Copy Code"
+                      >
+                        {copiedCode ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                      </button>
+                      <button 
+                        onClick={copyRoomLink} 
+                        className="p-1 border border-black bg-[#F4F3EE] hover:bg-black hover:text-white text-black transition cursor-pointer"
+                        title="Copy Invite Link"
+                      >
+                        {copiedLink ? <Check size={14} className="text-green-600" /> : <Link size={14} />}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto">
-                    {Object.values(onlineRoomData.players || {}).map((p) => {
-                      const isMe = p.id === myPlayerId;
-                      const isHost = p.id === onlineRoomData.hostId;
-                      return (
-                        <div
-                          key={p.id}
-                          className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${
-                            isMe ? 'bg-indigo-950/40 border border-indigo-500/30 text-indigo-200' : 'bg-slate-900 border border-slate-800 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            {isHost && <Crown size={14} className="text-yellow-400" title="Host" />}
-                            <span>{p.name}</span>
-                            {isMe && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">
-                                You
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Ready
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Card Preview with Shuffle Option */}
-                <div className="flex flex-col items-center gap-2 w-full max-w-xs">
-                  <div className="flex items-center justify-between w-full px-1">
-                    <span className="text-xs font-bold text-slate-400">Your Card Preview:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold px-2 py-1 bg-black text-[#CCFF00] border border-black flex items-center gap-1">
+                      <Users size={12} />
+                      {Object.keys(onlineRoomData.players || {}).length}P
+                    </span>
                     <button
-                      onClick={shuffleOnlineBoard}
-                      className="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition"
+                      onClick={leaveOnlineRoom}
+                      className="p-1.5 border-2 border-black bg-white hover:bg-red-500 hover:text-white text-black transition cursor-pointer"
+                      title="Leave Room"
                     >
-                      <Shuffle size={12} /> Auto-Shuffle
+                      <LogOut size={16} />
                     </button>
                   </div>
-
-                  <div 
-                    className="grid gap-1.5 w-full aspect-square bg-slate-950 p-2.5 rounded-2xl border border-slate-800 shadow-inner"
-                    style={{ 
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(${onlineRoomData.gridSize || 5}, minmax(0, 1fr))` 
-                    }}
-                  >
-                    {myOnlineBoard.map((num, i) => (
-                      <div key={i} className="w-full h-full bg-slate-900 rounded-lg flex items-center justify-center text-center font-black text-amber-300 text-xs sm:text-sm border border-slate-800 leading-none">
-                        {num}
-                      </div>
-                    ))}
-                  </div>
                 </div>
 
-                {/* Action Buttons */}
-                {myPlayerId === onlineRoomData.hostId ? (
-                  <div className="flex flex-col gap-2.5 w-full max-w-xs">
-                    {Object.keys(onlineRoomData.players || {}).length < 2 ? (
-                      <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2">
-                        <Users size={16} className="text-amber-400 animate-pulse" />
-                        <span>Waiting for at least 1 friend to join...</span>
+                {/* Online Lobby View */}
+                {onlineRoomData.status === 'lobby' && (
+                  <div className="w-full bg-white border-2 border-black shadow-brutal p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                      <span className="text-[10px] font-mono font-bold text-black uppercase">CONNECTED PLAYERS</span>
+                      <span className="text-[9px] px-1.5 py-0.2 bg-black text-[#CCFF00] font-mono font-bold">
+                        {Object.keys(onlineRoomData.players || {}).length} JOINED
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
+                      {Object.values(onlineRoomData.players || {}).map((p) => {
+                        const isMe = p.id === myPlayerId;
+                        const isHost = p.id === onlineRoomData.hostId;
+                        return (
+                          <div
+                            key={p.id}
+                            className={`flex items-center justify-between px-2.5 py-1.5 border border-black font-mono text-xs font-bold ${
+                              isMe ? 'bg-[#CCFF00] text-black' : 'bg-[#F4F3EE] text-black'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {isHost && <Crown size={14} className="text-[#FF5500]" title="Host" />}
+                              <span>{p.name}</span>
+                              {isMe && <span className="text-[9px] px-1 py-0.2 bg-black text-white font-bold">YOU</span>}
+                            </div>
+                            <span className="text-[9px] font-mono text-emerald-700 uppercase font-bold">READY</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {myPlayerId === onlineRoomData.hostId ? (
+                      <div className="flex flex-col gap-2 pt-1">
+                        {Object.keys(onlineRoomData.players || {}).length < 2 ? (
+                          <div className="p-2.5 bg-[#F4F3EE] border-2 border-black text-[10px] font-mono text-black flex items-center justify-center gap-2 font-bold">
+                            <Users size={14} className="text-[#FF5500] animate-pulse" />
+                            <span>WAITING FOR PLAYERS TO JOIN...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => startOnlineGame(false)}
+                              className="w-full py-2.5 bg-[#FF5500] hover:bg-black text-white border-2 border-black font-condensed font-black text-lg uppercase transition-all shadow-brutal cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <Play size={18} fill="currentColor" /> START MATCH
+                            </button>
+                            <button
+                              onClick={() => startOnlineGame(true)}
+                              className="w-full py-2 bg-white hover:bg-black hover:text-white text-black font-mono font-bold text-xs uppercase border-2 border-black transition shadow-brutal-sm cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <Shuffle size={13} /> TRADITIONAL SWAP & START
+                            </button>
+                          </>
+                        )}
                       </div>
                     ) : (
-                      <>
-                        <button
-                          onClick={() => startOnlineGame(false)}
-                          className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 font-extrabold text-slate-950 text-xs shadow-lg hover:scale-[1.01] active:scale-[0.99] transition flex items-center justify-center gap-1.5"
-                        >
-                          <Play size={15} fill="currentColor" /> Start Match
-                        </button>
-                        <button
-                          onClick={() => startOnlineGame(true)}
-                          className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-amber-500/30 transition flex items-center justify-center gap-1.5"
-                        >
-                          <Shuffle size={14} /> Traditional Rule: Swap Papers & Start
-                        </button>
-                      </>
+                      <div className="p-3 bg-[#F4F3EE] border-2 border-black flex items-center justify-center gap-2 text-xs font-mono font-bold text-black animate-pulse">
+                        <Loader2 size={16} className="animate-spin text-[#FF5500]" />
+                        WAITING FOR HOST TO START...
+                      </div>
                     )}
                   </div>
-                ) : (
-                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center gap-2 text-xs font-semibold text-amber-400 animate-pulse">
-                    <Loader2 size={16} className="animate-spin" />
-                    Waiting for host to start match...
+                )}
+
+                {/* Online Playing View */}
+                {onlineRoomData.status === 'playing' && (
+                  <div className="w-full flex flex-col gap-3">
+                    <div className={`w-full border-2 border-black shadow-brutal p-3 flex items-center justify-between ${
+                      onlineRoomData.turnUserId === myPlayerId ? 'bg-[#FF5500] text-white' : 'bg-black text-white'
+                    }`}>
+                      <div>
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.2 bg-white text-black">
+                          ACTIVE TURN
+                        </span>
+                        <h3 className="font-condensed font-black text-2xl uppercase tracking-tight mt-1 leading-none">
+                          {onlineRoomData.turnUserId === myPlayerId 
+                            ? '⭐ YOUR TURN! CALL NUMBER' 
+                            : `${onlineRoomData.players[onlineRoomData.turnUserId]?.name || 'PLAYER'}'S TURN`}
+                        </h3>
+                      </div>
+                      <ArrowUpRight size={30} strokeWidth={3} className="text-white shrink-0" />
+                    </div>
+
+                    {/* Online Call Log */}
+                    <div className="w-full bg-white border-2 border-black shadow-brutal p-3 flex flex-col gap-2">
+                      <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+                          <History size={13} className="text-[#FF5500]" /> CALL LOG ({onlineRoomData.calledNumbers?.length || 0})
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-black/50">SEQUENCE</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                        {(onlineRoomData.calledNumbers || []).map((n, i) => (
+                          <span key={i} className="px-1.5 py-0.5 bg-black text-[#CCFF00] font-mono font-bold text-[10px] border border-black">
+                            #{i + 1}: {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Online Standings */}
+                    <div className="w-full bg-white border-2 border-black shadow-brutal p-3 flex flex-col gap-2">
+                      <div className="flex items-center justify-between border-b-2 border-black pb-1.5">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+                          <Trophy size={13} className="text-[#FF5500]" /> ROOM STANDINGS
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-black/50">CARDS</span>
+                      </div>
+                      <div className="space-y-1 max-h-28 overflow-y-auto pt-1">
+                        {Object.values(onlineRoomData.players || {}).map((p) => {
+                          const isMe = p.id === myPlayerId;
+                          return (
+                            <div key={p.id} className="flex items-center justify-between text-xs font-bold px-2 py-1.5 border border-black bg-[#F4F3EE]">
+                              <span className="text-black flex items-center gap-1.5">
+                                {p.rank && <Crown size={14} className="text-[#FF5500]" />}
+                                {p.name} {isMe && '(YOU)'}
+                              </span>
+                              <span className={p.rank ? 'text-[#FF5500] font-black' : 'text-black/60 font-mono text-[10px]'}>
+                                {p.rank ? `RANK #${p.rank}` : `${p.lines || 0}/${onlineRoomData.targetLines || 5} LINES`}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Online Finished View */}
+                {onlineRoomData.status === 'finished' && (
+                  <div className="w-full bg-white border-2 border-black shadow-brutal p-4 flex flex-col gap-3 text-center items-center">
+                    <div className="w-12 h-12 border-2 border-black bg-[#FF5500] text-white flex items-center justify-center shadow-brutal-sm">
+                      <Trophy size={28} />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-1.5 py-0.5 bg-black text-[#CCFF00]">
+                        ONLINE MATCH COMPLETE
+                      </span>
+                      <h2 className="font-condensed font-black text-3xl uppercase tracking-tight text-black mt-1">
+                        ROOM RESULTS
+                      </h2>
+                    </div>
+
+                    <div className="w-full space-y-1.5 max-h-36 overflow-y-auto">
+                      {Object.values(onlineRoomData.players || {}).map((p) => (
+                        <div key={p.id} className="p-2 border border-black bg-[#F4F3EE] flex items-center justify-between text-xs font-bold">
+                          <span className="flex items-center gap-1.5">
+                            {p.rank && <Crown size={14} className="text-[#FF5500]" />}
+                            {p.name} {p.id === myPlayerId && '(YOU)'}
+                          </span>
+                          <span className={p.rank ? 'text-[#FF5500] font-black' : 'text-black/60 font-mono text-[10px]'}>
+                            {p.rank ? `RANK #${p.rank}` : `${p.lines || 0}/${onlineRoomData.targetLines || 5} LINES`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col gap-2 w-full pt-1">
+                      {myPlayerId === onlineRoomData.hostId ? (
+                        <button
+                          onClick={playAgainOnline}
+                          className="w-full py-2.5 bg-[#FF5500] hover:bg-black text-white border-2 border-black font-condensed font-black text-base uppercase transition-all shadow-brutal cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <RotateCcw size={15} /> PLAY REMATCH
+                        </button>
+                      ) : (
+                        <p className="text-xs font-mono text-[#FF5500] animate-pulse font-bold">
+                          WAITING FOR HOST TO START REMATCH...
+                        </p>
+                      )}
+
+                      <button
+                        onClick={leaveOnlineRoom}
+                        className="w-full py-2 bg-white hover:bg-black hover:text-white text-black border-2 border-black font-mono font-bold text-xs uppercase transition shadow-brutal-sm cursor-pointer"
+                      >
+                        LEAVE ROOM
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* --- ONLINE ACTIVE PLAYING PHASE --- */}
-            {onlineRoomData.status === 'playing' && (
-              <div className="w-full flex flex-col gap-6 items-center">
-                {/* Active Turn Banner */}
-                <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center justify-between`}>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Turn</span>
-                    <h3 className={`text-lg font-black ${
-                      onlineRoomData.turnUserId === myPlayerId ? 'text-amber-400 animate-pulse' : 'text-slate-200'
-                    }`}>
-                      {onlineRoomData.turnUserId === myPlayerId ? '⭐ YOUR TURN! Pick a number' : `${onlineRoomData.players[onlineRoomData.turnUserId]?.name || 'Player'}'s turn`}
-                    </h3>
-                  </div>
+          </div>
 
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Completed Lines ({onlineRoomData.players[myPlayerId]?.lines || 0}/{onlineRoomData.targetLines || 5})
-                    </span>
-                    {renderBingoLetterHeader(onlineRoomData.players[myPlayerId]?.lines || 0, onlineRoomData.gridSize || 5)}
-                  </div>
-                </div>
-
-                {/* Grid Card */}
-                <div className={`w-full ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col items-center gap-4`}>
-                  <div 
-                    className="grid gap-2 w-full max-w-md aspect-square bg-slate-950 p-3 rounded-2xl border border-slate-800 shadow-inner relative" 
-                    style={{ 
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(${onlineRoomData.gridSize || 5}, minmax(0, 1fr))` 
-                    }}
-                  >
-                    
-                    {renderLineStrikeThroughs(
-                      myOnlineCompletedLines,
-                      onlineRoomData.gridSize || 5,
-                      currentTheme.strokeColor
-                    )}
-
-                    {myOnlineBoard.map((num, cellIdx) => {
-                      const isCalled = onlineRoomData.calledNumbers?.includes(num);
-                      const isMyTurn = onlineRoomData.turnUserId === myPlayerId;
-
-                      return (
-                        <button
-                          key={cellIdx}
-                          disabled={!isMyTurn || isCalled}
-                          onClick={() => announceOnlineNumber(num)}
-                          className={`relative w-full h-full rounded-xl font-black transition-all flex items-center justify-center border text-base sm:text-2xl ${
-                            isCalled
-                              ? currentTheme.cellMarked
-                              : `${currentTheme.cellBg} ${isMyTurn ? 'hover:scale-[1.04] cursor-pointer' : 'cursor-default opacity-80'}`
-                          }`}
-                        >
-                          <span className="flex items-center justify-center text-center w-full h-full leading-none">{num}</span>
-                          {isCalled && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-red-500/80 text-2xl sm:text-4xl font-black">✕</span>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Call Log & Standings */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-                  {/* Call Log */}
-                  <div className={`p-4 rounded-2xl ${currentTheme.cardBg} border border-slate-800 flex flex-col gap-2`}>
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                      <History size={14} className={currentTheme.textAccent} /> Call Log ({onlineRoomData.calledNumbers?.length || 0})
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
-                      {(onlineRoomData.calledNumbers || []).map((n, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-bold text-xs">
-                          #{i + 1}: {n}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Online Standings & Card Reveal */}
-                  <div className={`p-4 rounded-2xl ${currentTheme.cardBg} border border-slate-800 flex flex-col gap-2`}>
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                      <Trophy size={14} className="text-yellow-400" /> Players & Standings
-                    </span>
-                    <div className="space-y-1.5 max-h-24 overflow-y-auto pt-1">
-                      {Object.values(onlineRoomData.players || {}).map((p) => {
-                        const isMe = p.id === myPlayerId;
-                        return (
-                          <div key={p.id} className="flex items-center justify-between text-xs font-semibold px-2 py-1 rounded-lg bg-slate-950/60">
-                            <span className="text-slate-300 flex items-center gap-1">
-                              {p.rank && <Crown size={12} className="text-yellow-400" />}
-                              {p.name} {isMe && '(You)'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className={p.rank ? 'text-yellow-400 font-bold' : 'text-slate-400'}>
-                                {p.rank ? `Rank #${p.rank} (BINGO)` : `${p.lines || 0}/${onlineRoomData.targetLines || 5} Lines`}
-                              </span>
-
-                              {p.rank && (
-                                <button
-                                  onClick={() => setViewCardsModal({ open: true, playerIdx: null, onlinePlayerId: p.id })}
-                                  className="p-1 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/40"
-                                  title="View Player's Card"
-                                >
-                                  <Eye size={12} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
+          {/* ------------------------------------------------------ */}
+          {/* RIGHT PANE CONTAINER: ALWAYS-VISIBLE LIVE BINGO CARD   */}
+          {/* ------------------------------------------------------ */}
+          <div className="lg:col-span-7 bg-white border-2 border-black shadow-brutal p-4 sm:p-5 flex flex-col gap-4 w-full items-center">
+            
+            {/* Right Pane Header: Title & Auto-Shuffle Button */}
+            <div className="w-full flex items-center justify-between border-b-2 border-black pb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-condensed font-black text-xl uppercase tracking-wider text-black">
+                  LIVE BINGO CARD
+                </span>
+                <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 bg-black text-[#CCFF00]">
+                  {activeGridSize}×{activeGridSize}
+                </span>
               </div>
-            )}
 
-            {/* --- ONLINE MATCH CONCLUDED SCREEN --- */}
-            {onlineRoomData.status === 'finished' && (() => {
-              const winners = onlineRoomData.winners || [];
-              const firstWinner = winners[0];
-              const isMeWinner = winners.some(w => w.id === myPlayerId);
+              <button
+                onClick={handleAutoShuffle}
+                disabled={isGameActive && mode === 'vs-computer'}
+                className="py-1 px-2.5 bg-white hover:bg-black hover:text-white text-black border-2 border-black font-condensed font-black text-xs uppercase transition shadow-brutal-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Shuffle card numbers"
+              >
+                <Shuffle size={13} /> AUTO-SHUFFLE
+              </button>
+            </div>
 
-              // Gather all players with their lines and winner status
-              const allPlayers = Object.values(onlineRoomData.players || {}).map(p => {
-                const winnerInfo = winners.find(w => w.id === p.id);
-                return {
-                  ...p,
-                  isWinner: !!winnerInfo,
-                  rank: winnerInfo ? winnerInfo.rank : null,
-                  lines: p.lines || 0
-                };
-              });
+            {/* B-I-N-G-O Progress Blocks (Modular Cards) */}
+            <div className="w-full flex flex-col gap-1 items-center">
+              <div className="w-full flex items-center justify-between px-1">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-black/60">
+                  B-I-N-G-O PROGRESS TRACKER
+                </span>
+                <span className="text-[9px] font-mono font-bold text-[#FF5500]">
+                  {activeCompletedLines.length} OF {activeGridSize} LINES COMPLETED
+                </span>
+              </div>
+              {renderBingoLetterHeader(activeCompletedLines.length, activeGridSize)}
+            </div>
 
-              // Sort winners first by rank, then others by completed lines descending
-              allPlayers.sort((a, b) => {
-                if (a.isWinner && b.isWinner) return a.rank - b.rank;
-                if (a.isWinner) return -1;
-                if (b.isWinner) return 1;
-                return b.lines - a.lines;
-              });
-
-              return (
-                <div className={`w-full max-w-md ${currentTheme.cardBg} border border-slate-800 rounded-3xl p-6 text-center shadow-2xl flex flex-col items-center gap-5 animate-in fade-in duration-300`}>
-                  <div className="p-4 rounded-full bg-yellow-500/10 text-yellow-400 ring-8 ring-yellow-500/5 animate-bounce">
-                    <Trophy size={48} />
-                  </div>
-
-                  <div>
-                    <h2 className="text-2xl font-black text-white">Match Concluded!</h2>
-                    <p className="text-xs text-slate-400 mt-1">Official Final Standings & Winner</p>
-                  </div>
-
-                  {/* Outcome Highlight Banner */}
-                  {isMeWinner ? (
-                    <div className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-400/20 to-amber-500/20 border border-yellow-400/50 text-yellow-300 font-black text-sm flex items-center justify-center gap-2 shadow-lg">
-                      <Sparkles size={16} className="text-yellow-400 animate-spin" />
-                      <span>VICTORY! You claimed BINGO!</span>
-                    </div>
-                  ) : (
-                    <div className="w-full py-2.5 px-4 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 font-extrabold text-xs flex items-center justify-center gap-2">
-                      <Crown size={15} className="text-yellow-400 shrink-0" />
-                      <span>
-                        <strong className="text-yellow-400 font-black">{firstWinner?.name || 'Opponent'}</strong> completed {onlineRoomData.targetLines || 5} lines and won the game!
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Complete Player Standings */}
-                  <div className="w-full space-y-2">
-                    {allPlayers.map((p, idx) => (
-                      <div 
-                        key={p.id} 
-                        className={`p-3 rounded-2xl border flex items-center justify-between text-xs font-bold transition ${
-                          p.isWinner 
-                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-md ring-1 ring-amber-500/20' 
-                            : 'bg-slate-950 border-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {p.isWinner ? (
-                            <Crown size={16} className="text-yellow-400" />
-                          ) : (
-                            <span className="w-4 h-4 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-slate-400 font-mono">
-                              #{idx + 1}
-                            </span>
-                          )}
-                          <span className={p.isWinner ? 'font-black text-white' : ''}>
-                            {p.name} {p.id === myPlayerId && '(You)'}
-                          </span>
-                        </span>
-
-                        <div className="flex items-center gap-2">
-                          <span className={p.isWinner ? 'text-yellow-400 font-black tracking-wide' : 'text-slate-400'}>
-                            {p.isWinner ? `Rank #${p.rank} (BINGO)` : `${p.lines}/${onlineRoomData.targetLines || 5} Lines`}
-                          </span>
-
-                          <button
-                            onClick={() => setViewCardsModal({ open: true, playerIdx: null, onlinePlayerId: p.id })}
-                            className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 flex items-center gap-1 transition"
-                            title="Inspect Player's Card"
-                          >
-                            <Eye size={12} /> View Card
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Rematch Controls */}
-                  <div className="flex flex-col gap-2 w-full pt-2">
-                    {myPlayerId === onlineRoomData.hostId ? (
-                      <button
-                        onClick={playAgainOnline}
-                        className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:opacity-95 text-slate-950 font-black text-xs transition shadow-lg flex items-center justify-center gap-1.5"
-                      >
-                        <RotateCcw size={15} /> Play Rematch (New Cards)
-                      </button>
-                    ) : (
-                      <p className="text-xs text-amber-400 animate-pulse font-medium">
-                        Waiting for host to initiate rematch...
-                      </p>
-                    )}
-
-                    <button
-                      onClick={leaveOnlineRoom}
-                      className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition"
-                    >
-                      Return to Main Menu
-                    </button>
-                  </div>
+            {/* THE LIVE BINGO GRID */}
+            <div className="w-full flex flex-col items-center relative">
+              
+              {/* Optional Device Handoff overlay in Pass & Play mode */}
+              {mode === 'pass-and-play' && isGameActive && !isLocalUserTurn && (
+                <div className="absolute inset-0 z-30 bg-black/85 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 text-[#CCFF00] p-6 text-center">
+                  <Users size={40} className="animate-bounce" />
+                  <p className="font-condensed font-black text-2xl uppercase tracking-wider">PASS DEVICE</p>
+                  <p className="text-[10px] font-mono text-white/80">HAND OVER TO {playerNames[localState.currentTurnIdx].toUpperCase()}</p>
                 </div>
-              );
-            })()}
+              )}
+
+              <div 
+                className="grid gap-1.5 sm:gap-2 w-full aspect-square bg-[#F4F3EE] p-2 sm:p-3 border-2 border-black relative" 
+                style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))` 
+                }}
+              >
+                {renderLineStrikeThroughs(
+                  activeCompletedLines,
+                  activeGridSize,
+                  '#000000'
+                )}
+
+                {activeBoard.map((num, cellIdx) => {
+                  const isCalled = activeCalledNumbers.includes(num);
+
+                  return (
+                    <button
+                      key={cellIdx}
+                      disabled={isCalled || (isGameActive && !isUserTurnToCall)}
+                      onClick={() => {
+                        if (!isGameActive) {
+                          showToast('Start a match on the left panel to call numbers!');
+                          return;
+                        }
+                        if (isOnline) {
+                          announceOnlineNumber(num);
+                        } else {
+                          announceNumberLocal(num);
+                        }
+                      }}
+                      className={`relative w-full h-full border-2 border-black font-condensed font-black transition-all flex items-center justify-center text-lg sm:text-3xl ${
+                        isCalled
+                          ? 'bg-black text-[#CCFF00] shadow-none cursor-not-allowed'
+                          : isGameActive
+                            ? isUserTurnToCall 
+                              ? 'bg-white text-black hover:bg-[#FAF9F5] hover:-translate-y-0.5 hover:shadow-brutal-sm cursor-pointer' 
+                              : 'bg-white text-black/60 cursor-default'
+                            : 'bg-white text-black hover:bg-[#FAF9F5] cursor-pointer'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center text-center w-full h-full leading-none">
+                        {num}
+                      </span>
+                      {isCalled && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <span className="text-[#FF5500] text-3xl sm:text-5xl font-black leading-none select-none opacity-90">✕</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bottom 4-Column Telemetry Strip */}
+            <div className="grid grid-cols-4 w-full bg-white border-2 border-black shadow-brutal divide-x-2 divide-black text-left">
+              <div className="p-2 sm:p-2.5">
+                <span className="block text-[8px] font-mono font-bold uppercase text-black/50 tracking-wider">GRID SPEC</span>
+                <span className="font-condensed font-black text-xs sm:text-sm uppercase tracking-tight text-black">{activeGridSize} × {activeGridSize}</span>
+              </div>
+              <div className="p-2 sm:p-2.5">
+                <span className="block text-[8px] font-mono font-bold uppercase text-black/50 tracking-wider">CALLS</span>
+                <span className="font-condensed font-black text-xs sm:text-sm uppercase tracking-tight text-black">{activeCalledNumbers.length} NUMS</span>
+              </div>
+              <div className="p-2 sm:p-2.5">
+                <span className="block text-[8px] font-mono font-bold uppercase text-black/50 tracking-wider">LINES</span>
+                <span className="font-condensed font-black text-xs sm:text-sm uppercase tracking-tight text-[#FF5500]">
+                  {activeCompletedLines.length} / {isOnline ? (onlineRoomData?.targetLines || targetLines) : targetLines}
+                </span>
+              </div>
+              <div className="p-2 sm:p-2.5">
+                <span className="block text-[8px] font-mono font-bold uppercase text-black/50 tracking-wider">STATUS</span>
+                <span className="font-condensed font-black text-xs sm:text-sm uppercase tracking-tight text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {isGameActive ? (isUserTurnToCall ? 'YOUR MOVE' : 'WAITING') : 'READY'}
+                </span>
+              </div>
+            </div>
 
           </div>
-        )}
+
+        </div>
 
       </main>
 
       {/* MODAL: VIEW PLAYER REVEALED CARD */}
       {viewCardsModal.open && (
         <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl flex flex-col items-center gap-4 relative">
+          <div className="bg-white border-2 border-black shadow-brutal-lg max-w-md w-full p-5 flex flex-col items-center gap-4 relative">
             <button
               onClick={() => setViewCardsModal({ open: false, playerIdx: null, onlinePlayerId: null })}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 transition"
+              className="absolute top-3 right-3 p-1 text-black border-2 border-black bg-[#F4F3EE] hover:bg-black hover:text-white transition cursor-pointer"
             >
               <X size={18} />
             </button>
 
-            <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
-              <Crown size={18} className="text-yellow-400" /> 
-              Revealed Card: {
-                viewCardsModal.playerIdx !== null 
+            <div className="text-center">
+              <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-1.5 py-0.5 bg-black text-[#CCFF00]">
+                CARD INSPECTION
+              </span>
+              <h3 className="font-condensed font-black text-2xl uppercase tracking-tight text-black mt-1">
+                {viewCardsModal.playerIdx !== null 
                   ? playerNames[viewCardsModal.playerIdx] 
-                  : (onlineRoomData?.players[viewCardsModal.onlinePlayerId]?.name || 'Player')
-              }
-            </h3>
+                  : (onlineRoomData?.players[viewCardsModal.onlinePlayerId]?.name || 'PLAYER')}
+              </h3>
+            </div>
 
             {/* Local Player Card Reveal */}
             {viewCardsModal.playerIdx !== null && (
               <div 
-                className="grid gap-2 w-full aspect-square bg-slate-950 p-3 rounded-2xl border border-slate-800 relative"
+                className="grid gap-1.5 w-full aspect-square bg-[#F4F3EE] p-2.5 border-2 border-black relative"
                 style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` }}
               >
                 {renderLineStrikeThroughs(
                   localState.completedLines[viewCardsModal.playerIdx] || [],
                   gridSize,
-                  currentTheme.strokeColor
+                  '#000000'
                 )}
 
                 {(localState.boards[viewCardsModal.playerIdx] || []).map((num, idx) => {
@@ -1606,8 +1482,8 @@ export default function App() {
                   return (
                     <div
                       key={idx}
-                      className={`rounded-xl font-black flex items-center justify-center text-sm sm:text-xl border ${
-                        isCalled ? currentTheme.cellMarked : currentTheme.cellBg
+                      className={`border-2 border-black font-condensed font-black flex items-center justify-center text-lg sm:text-2xl ${
+                        isCalled ? 'bg-black text-[#CCFF00]' : 'bg-white text-black'
                       }`}
                     >
                       {num}
@@ -1620,7 +1496,7 @@ export default function App() {
             {/* Online Player Card Reveal */}
             {viewCardsModal.onlinePlayerId && onlineRoomData && (
               <div 
-                className="grid gap-2 w-full aspect-square bg-slate-950 p-3 rounded-2xl border border-slate-800 relative"
+                className="grid gap-1.5 w-full aspect-square bg-[#F4F3EE] p-2.5 border-2 border-black relative"
                 style={{ gridTemplateColumns: `repeat(${onlineRoomData.gridSize || 5}, minmax(0, 1fr))` }}
               >
                 {renderLineStrikeThroughs(
@@ -1630,7 +1506,7 @@ export default function App() {
                     onlineRoomData.gridSize || 5
                   ),
                   onlineRoomData.gridSize || 5,
-                  currentTheme.strokeColor
+                  '#000000'
                 )}
 
                 {(onlineRoomData.players[viewCardsModal.onlinePlayerId]?.board || []).map((num, idx) => {
@@ -1638,8 +1514,8 @@ export default function App() {
                   return (
                     <div
                       key={idx}
-                      className={`rounded-xl font-black flex items-center justify-center text-sm sm:text-xl border ${
-                        isCalled ? currentTheme.cellMarked : currentTheme.cellBg
+                      className={`border-2 border-black font-condensed font-black flex items-center justify-center text-lg sm:text-2xl ${
+                        isCalled ? 'bg-black text-[#CCFF00]' : 'bg-white text-black'
                       }`}
                     >
                       {num}
@@ -1652,12 +1528,12 @@ export default function App() {
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className="w-full max-w-4xl border-t border-slate-800/80 pt-4 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2 z-10">
-        <p>© Traditional Paper Bingo • Pass-and-Play, AI Bots & Online Multiplayer</p>
-        <p className="flex items-center gap-1">
-          <Info size={13} /> Complete {targetLines} lines to claim victory!
-        </p>
+      {/* FOOTER BAR */}
+      <footer className="w-full max-w-6xl border-t-2 border-black pt-3 flex items-center justify-between text-[10px] font-mono text-black/60 z-10">
+        <span className="font-bold uppercase">BINGO</span>
+        <span className="flex items-center gap-1 font-bold">
+          <Info size={12} /> {targetLines} LINES TO WIN
+        </span>
       </footer>
     </div>
   );
